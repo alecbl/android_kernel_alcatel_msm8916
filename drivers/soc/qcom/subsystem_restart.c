@@ -52,6 +52,10 @@ module_param(enable_debug, int, S_IRUGO | S_IWUSR);
 #define SHUTDOWN_ACK_MAX_LOOPS	50
 #define SHUTDOWN_ACK_DELAY_MS	100
 
+#ifdef CONFIG_MSM_DLOAD_MODE
+char panic_subsystem[16];
+#endif /* CONFIG_MSM_DLOAD_MODE */
+
 /**
  * enum p_subsys_state - state of a subsystem (private)
  * @SUBSYS_NORMAL: subsystem is operating normally

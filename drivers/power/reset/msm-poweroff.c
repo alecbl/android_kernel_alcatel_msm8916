@@ -63,7 +63,7 @@ static void *emergency_dload_mode_addr;
 static bool scm_dload_supported;
 
 static int dload_set(const char *val, struct kernel_param *kp);
-static int download_mode = 1;
+static int download_mode = 0;
 module_param_call(download_mode, dload_set, param_get_int,
 			&download_mode, 0644);
 static int panic_prep_restart(struct notifier_block *this,
@@ -214,6 +214,9 @@ static void halt_spmi_pmic_arbiter(void)
 
 static void msm_restart_prepare(const char *cmd)
 {
+#ifdef CONFIG_MSM_SUBSYSTEM_RESTART
+	extern char panic_subsystem[];
+#endif /* CONFIG_MSM_SUBSYSTEM_RESTART */
 	bool need_warm_reset = false;
 
 #ifdef CONFIG_MSM_DLOAD_MODE
@@ -227,11 +230,16 @@ static void msm_restart_prepare(const char *cmd)
 			(in_panic || restart_mode == RESTART_DLOAD));
 #endif
 
+	need_warm_reset = (get_dload_mode() ||
+                                (restart_mode == RESTART_DLOAD) ||
+				(cmd != NULL && cmd[0] != '\0'));
+
 	if (qpnp_pon_check_hard_reset_stored()) {
 		/* Set warm reset as true when device is in dload mode
 		 *  or device doesn't boot up into recovery, bootloader or rtc.
 		 */
 		if (get_dload_mode() ||
+			(restart_mode == RESTART_DLOAD) ||
 			((cmd != NULL && cmd[0] != '\0') &&
 			strcmp(cmd, "recovery") &&
 			strcmp(cmd, "bootloader") &&
@@ -243,7 +251,7 @@ static void msm_restart_prepare(const char *cmd)
 	}
 
 	/* Hard reset the PMIC unless memory contents must be maintained. */
-	if (need_warm_reset) {
+	if (need_warm_reset || (restart_mode == RESTART_DLOAD)) {
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
 	} else {
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
@@ -281,11 +289,39 @@ static void msm_restart_prepare(const char *cmd)
 			if (!ret)
 				__raw_writel(0x6f656d00 | (code & 0xff),
 					     restart_reason);
+			/* FR-793575, adb reboot oem-3a */
+			if (download_mode && (code & 0xff) == 0x3a)
+				set_dload_mode(1);
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
 		} else {
 			__raw_writel(0x77665501, restart_reason);
 		}
+	}
+
+	/* FR-793575, save subsystem name */
+#ifdef CONFIG_MSM_SUBSYSTEM_RESTART
+	if (in_panic) {
+		printk(KERN_ERR "subsystem %s crash\n", panic_subsystem);
+		if (!memcmp(panic_subsystem, "modem", 5)) {
+			__raw_writel(0x6f656dc1, restart_reason);
+		} else if (!memcmp(panic_subsystem, "wcnss", 5)) {
+			__raw_writel(0x6f656dc2, restart_reason);
+		} else if (!memcmp(panic_subsystem, "adsp", 4) || !memcmp(panic_subsystem, "ADSP", 4)) {
+			__raw_writel(0x6f656dc3, restart_reason);
+		} else if (!memcmp(panic_subsystem, "venus", 5)) {
+			__raw_writel(0x6f656dc4, restart_reason);
+		} else {
+			__raw_writel(0x6f656dc0, restart_reason);
+		}
+		if (download_mode)
+			set_dload_mode(1);
+	}
+#endif /* CONFIG_MSM_SUBSYSTEM_RESTART */
+
+//FR-820847, Powering on mode switch to 9008 mode
+	if (restart_mode == RESTART_DLOAD) {
+		enable_emergency_dload_mode();
 	}
 
 	flush_cache_all();
