@@ -39,7 +39,11 @@ DTB_LIST := $(addsuffix .dtb,$(DTB_NAMES))
 else
 DTB_LIST := $(dtb-y)
 endif
+ifndef CONFIG_TCT_8X16_COMMON
 DTB_OBJS := $(addprefix $(obj)/dts/,$(DTB_LIST))
+else
+DTB_OBJS := $(addprefix $(obj)/dts/$(TARGET_PRODUCT)/,$(DTB_LIST))
+endif
 
 ifeq ($(CONFIG_XIP_KERNEL),y)
 
