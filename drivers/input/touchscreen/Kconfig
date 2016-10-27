@@ -1050,6 +1050,16 @@ config TOUCHSCREEN_GT9XX
 
 source "drivers/input/touchscreen/gt9xx/Kconfig"
 
+
+#[PLATFORM]-Add-BEGIN by TCTSH.furong,2014/11/18 add for msg2638 TP driver
+source "drivers/input/touchscreen/msg2638_tp/Kconfig"
+#[PLATFORM]-Add-END by TCTSH.furong
+source "drivers/input/touchscreen/tp_tct/Kconfig"
+source "drivers/input/touchscreen/gt9xx_v2/Kconfig"
+#[PLATFORM]-Add-BEGIN by TCTSH.FURONG, 2015/01/12 add for FT5436 TP driver
+source "drivers/input/touchscreen/ft5436_idol347/Kconfig"
+#[PLATFORM]-Add-END by TCTSH.FURONG
+
 config TOUCHSCREEN_BU21150
 	tristate "JDI AFE BU21150"
 	depends on SPI_MASTER
