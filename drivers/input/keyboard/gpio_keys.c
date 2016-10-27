@@ -30,7 +30,26 @@
 #include <linux/of_gpio.h>
 #include <linux/spinlock.h>
 #include <linux/pinctrl/consumer.h>
+#ifdef CONFIG_TCT_8X16_IDOL347
+extern void report_hall_boot_state(void);
+#endif
+/* [PLATFORM]-ADD-BEGIN by ning.wei SZ for HALL driver, 2014-07-25 */
+#ifdef CONFIG_TCT_8X16_COMMON
+static DEFINE_MUTEX(gpio_keys_lock);
+static unsigned int init_ok=0;
 
+static unsigned hall_key=250;
+module_param(hall_key, uint, S_IRUGO);
+#endif
+/* [PLATFORM]-ADD-END by ning.wei SZ*/
+//[PLATFORM] Add-Begin by wangxingchen 02/04/2015 CR.858216 smart-window function.
+#if defined (CONFIG_TCT_8X16_IDOL3)
+extern void ft5x06_set_sensitivity(u8 val);
+//[PLATFORM] Add-Begin by bin.su 03/18/2015 CR.927276 smart-window function.
+extern void syna_set_sensitivity(u8 val);
+//[PLATFORM] Add-End by bin.su 03/18/2015 .
+#endif
+//[PLATFORM] Add-End by wangxingchen 02/04/2015 .
 struct gpio_button_data {
 	const struct gpio_keys_button *button;
 	struct input_dev *input;
@@ -312,17 +331,8 @@ static DEVICE_ATTR(disabled_switches, S_IWUSR | S_IRUGO,
 		   gpio_keys_show_disabled_switches,
 		   gpio_keys_store_disabled_switches);
 
-static struct attribute *gpio_keys_attrs[] = {
-	&dev_attr_keys.attr,
-	&dev_attr_switches.attr,
-	&dev_attr_disabled_keys.attr,
-	&dev_attr_disabled_switches.attr,
-	NULL,
-};
 
-static struct attribute_group gpio_keys_attr_group = {
-	.attrs = gpio_keys_attrs,
-};
+/* [PLATFORM]-ADD-BEGIN by ning.wei SZ for HALL driver, 2014-07-25 */
 
 static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 {
@@ -339,6 +349,52 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	}
 	input_sync(input);
 }
+
+/* [PLATFORM]-Modified-END by ning.wei SZ */
+/* [PLATFORM]-ADD-BEGIN by ning.wei SZ for HALL driver, 2014-07-25 */
+#ifdef CONFIG_TCT_8X16_COMMON
+static ssize_t gpio_keys_init_ok_show(struct device *dev,
+                       struct device_attribute *attr,
+                       char *buf)
+{
+    unsigned int show_para=0;
+
+    mutex_lock(&gpio_keys_lock);
+    show_para = init_ok;
+    mutex_unlock(&gpio_keys_lock);
+
+    return sprintf(buf, "%u\n", show_para);
+}
+static ssize_t gpio_keys_init_ok_store(struct device *dev,
+					    struct device_attribute *attr,
+					     const char *buf, size_t count)
+{
+#ifdef CONFIG_TCT_8X16_IDOL347
+	report_hall_boot_state();
+#endif
+    return count;
+}
+
+static DEVICE_ATTR(init_ok, S_IWUSR | S_IRUGO,
+		   gpio_keys_init_ok_show,
+		   gpio_keys_init_ok_store);
+#endif
+
+static struct attribute *gpio_keys_attrs[] = {
+	&dev_attr_keys.attr,
+	&dev_attr_switches.attr,
+	&dev_attr_disabled_keys.attr,
+	&dev_attr_disabled_switches.attr,
+#ifdef CONFIG_TCT_8X16_COMMON
+    &dev_attr_init_ok.attr,
+#endif
+	NULL,
+};
+
+static struct attribute_group gpio_keys_attr_group = {
+	.attrs = gpio_keys_attrs,
+};
+
 
 static void gpio_keys_gpio_work_func(struct work_struct *work)
 {
