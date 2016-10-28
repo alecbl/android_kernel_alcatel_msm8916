@@ -1051,6 +1051,71 @@ static int mdss_dsi_parse_reset_seq(struct device_node *np,
 	return 0;
 }
 
+#ifdef CONFIG_TCT_8X16_IDOL347
+#define REG_BUF_0_STATUS 0x81
+#define REG_BUF_1_STATUS 0x73
+#define REG_BUF_2_STATUS 0x06
+
+#define REG_09_BUF_0_STATUS 0x81
+#define REG_09_BUF_1_STATUS 0x73
+#define REG_09_BUF_2_STATUS 0x06
+
+#define REG_45_BUF_0_STATUS 0x05
+#define REG_45_BUF_1_STATUS 0x73
+
+static int mdss_dsi_hx8394d_read_status(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+{
+	if ((ctrl_pdata->status_buf.data[0] !=
+					REG_BUF_0_STATUS) || (ctrl_pdata->status_buf.data[1] !=
+					REG_BUF_1_STATUS)||(ctrl_pdata->status_buf.data[2] !=
+					REG_BUF_2_STATUS)) {
+		pr_err("%s: Read back value from panel is incorrect\n",
+							__func__);
+		return -EINVAL;
+	} else {
+		return 1;
+	}
+}
+static int mdss_dsi_hx8394d_read_status_for_one(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+{
+     if (ctrl_pdata->status_buf.data[0] !=
+					ctrl_pdata->status_value_for_one) {
+		pr_err("%s: Read back value from panel is incorrect\n",
+							__func__);
+		return -EINVAL;
+	} else {
+		return 1;
+	}
+}
+
+static int mdss_dsi_hx8394f_read_status(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+{
+	if ((ctrl_pdata->status_buf.data[0] !=
+					REG_09_BUF_0_STATUS) || (ctrl_pdata->status_buf.data[1] !=
+					REG_09_BUF_1_STATUS)||  (ctrl_pdata->status_buf.data[2] !=
+					REG_09_BUF_2_STATUS)) {
+		pr_err("%s: Read back value from panel is incorrect\n",
+							__func__);
+		return -EINVAL;
+	} else {
+		return 1;
+	}
+}
+
+
+static int mdss_dsi_hx8394f_read_status_for_one(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+{
+	if ((ctrl_pdata->status_buf.data[0] !=
+					REG_45_BUF_0_STATUS) || (ctrl_pdata->status_buf.data[1] !=
+					REG_45_BUF_1_STATUS)) {
+		pr_err("%s: Read back value from panel is incorrect\n",
+							__func__);
+		return -EINVAL;
+	} else {
+		return 1;
+	}
+}
+#endif
 static int mdss_dsi_gen_read_status(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	if (ctrl_pdata->status_buf.data[0] !=
@@ -1785,6 +1850,13 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->status_cmds,
 			"qcom,mdss-dsi-panel-status-command",
 				"qcom,mdss-dsi-panel-status-command-state");
+	#ifdef CONFIG_TCT_8X16_IDOL347
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->status_cmds_for_one,
+			"qcom,mdss-dsi-panel-status-command_for_one",
+				"qcom,mdss-dsi-panel-status-command-state");
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-panel-status-value_for_one", &tmp);
+	ctrl_pdata->status_value_for_one= (!rc ? tmp : 0);
+	#endif
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-panel-status-value", &tmp);
 	ctrl_pdata->status_value = (!rc ? tmp : 0);
 
@@ -1806,6 +1878,24 @@ static int mdss_panel_parse_dt(struct device_node *np,
 			ctrl_pdata->status_cmds_rlen = 8;
 			ctrl_pdata->check_read_status =
 						mdss_dsi_nt35596_read_status;
+#ifdef CONFIG_TCT_8X16_IDOL347
+                } else if (!strcmp(data, "reg_read_hx8394d")) {
+			ctrl_pdata->status_mode = ESD_REG_HX8394D;
+			ctrl_pdata->status_cmds_rlen = 3;
+			ctrl_pdata->status_cmds_rlen_for_one= 1;
+			ctrl_pdata->check_read_status =
+						mdss_dsi_hx8394d_read_status;
+			ctrl_pdata->check_read_status_for_one=
+			mdss_dsi_hx8394d_read_status_for_one;
+               } else if (!strcmp(data, "reg_read_hx8394f")) {
+			ctrl_pdata->status_mode = ESD_REG_HX8394F;
+			ctrl_pdata->status_cmds_rlen = 3;
+			ctrl_pdata->status_cmds_rlen_for_one= 2;
+			ctrl_pdata->check_read_status =
+						mdss_dsi_hx8394f_read_status;
+			ctrl_pdata->check_read_status_for_one=
+			mdss_dsi_hx8394f_read_status_for_one;
+#endif
 		} else if (!strcmp(data, "te_signal_check")) {
 			if (pinfo->mipi.mode == DSI_CMD_MODE)
 				ctrl_pdata->status_mode = ESD_TE;

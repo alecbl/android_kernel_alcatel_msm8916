@@ -1159,6 +1159,8 @@ static void mdss_fb_scale_bl(struct msm_fb_data_type *mfd, u32 *bl_lvl)
 	(*bl_lvl) = temp;
 }
 
+extern bool alarm_boot;
+
 /* must call this function from within mfd->bl_lock */
 void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 {
@@ -1175,7 +1177,7 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 
 	if ((((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
 		|| !mfd->bl_updated) && !IS_CALIB_MODE_BL(mfd)) ||
-		mfd->panel_info->cont_splash_enabled) {
+		(!alarm_boot && (mfd->panel_info->cont_splash_enabled))) {
 		mfd->unset_bl_level = bkl_lvl;
 		return;
 	} else {
