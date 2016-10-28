@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015,2017 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,7 +28,10 @@ static struct v4l2_file_operations msm_sensor_v4l2_subdev_fops;
 
 /* Static declaration */
 static struct msm_sensor_ctrl_t *g_sctrl[MAX_CAMERAS];
-
+ /*[CAMERA]-ADD BEGIN by wenlong.song,2015-12-18,Task-1177157 ,for camera from L*/
+extern int actuator_exist;
+static int file_is_create = 0;
+ /*[CAMERA]-ADD END by wenlong.song,2015-12-18,Task-1177157 ,for camera from L*/
 static int msm_sensor_platform_remove(struct platform_device *pdev)
 {
 	struct msm_sensor_ctrl_t  *s_ctrl;
@@ -255,7 +258,9 @@ static int32_t msm_sensor_fill_actuator_subdevid_by_name(
 
 	if (0 == actuator_name_len)
 		return 0;
-
+	/*if actuator exist, add subdev of actuator.
+	Modify-BEGIN by TCTNB.YQJ,07/14/2014,FR-695481 */
+	if(actuator_exist){
 	src_node = of_parse_phandle(of_node, "qcom,actuator-src", 0);
 	if (!src_node) {
 		CDBG("%s:%d src_node NULL\n", __func__, __LINE__);
@@ -270,6 +275,7 @@ static int32_t msm_sensor_fill_actuator_subdevid_by_name(
 		*actuator_subdev_id = val;
 		of_node_put(src_node);
 		src_node = NULL;
+	}
 	}
 
 	return rc;
@@ -643,6 +649,32 @@ int32_t msm_sensor_driver_is_special_support(
 	}
 	return rc;
 }
+/* [PLATFORM]-Mod-BEGIN by TCTNB.YJ, add for rear camera on idol3  */
+static char vcm_type[8];
+static ssize_t vcm_type_read(struct class *class,
+				struct class_attribute *attr, char *buf)
+{
+	//int err;
+	if(actuator_exist)
+	 strcpy(vcm_type,"AF");
+	else
+	 strcpy(vcm_type,"FF");
+	return sprintf(buf, "%s\n", vcm_type);
+}
+
+static struct class_attribute vcm_type_value =
+	__ATTR(value, 0664, vcm_type_read, NULL);
+
+static struct class *vcm_type_class;
+
+/* static function definition */
+
+
+#if defined(CONFIG_TCT_8X16_IDOL3) || defined(CONFIG_TCT_8X16_IDOL347)|| defined(CONFIG_TCT_8X16_M823_ORANGE)
+int32_t special_actuator4tct = 0;
+int32_t special_actuator_s5k3m2 = 0;
+#endif
+/* [PLATFORM]-Mod-END by TCTNB.YJ*/
 
 int32_t msm_sensor_driver_probe(void *setting,
 	struct msm_sensor_info_t *probed_info, char *entity_name)
@@ -652,7 +684,7 @@ int32_t msm_sensor_driver_probe(void *setting,
 	struct msm_camera_cci_client        *cci_client = NULL;
 	struct msm_camera_sensor_slave_info *slave_info = NULL;
 	struct msm_camera_slave_info        *camera_info = NULL;
-
+	int ret = 0;/* [PLATFORM]-Mod-BEGIN by TCTNB.YJ, add for rear camera on idol3  */
 	unsigned long                        mount_pos = 0;
 	uint32_t                             is_yuv;
 
@@ -736,6 +768,23 @@ int32_t msm_sensor_driver_probe(void *setting,
 	CDBG("sensor_id 0x%x", slave_info->sensor_id_info.sensor_id);
 	CDBG("size %d", slave_info->power_setting_array.size);
 	CDBG("size down %d", slave_info->power_setting_array.size_down);
+ /*[CAMERA]-ADD BEGIN by wenlong.song,2015-12-18,Task-1177157 ,for camera from L*/
+	if(!file_is_create){
+	/* vcm_type create (/<sysfs>/class/vcm_type) */
+	vcm_type_class = class_create(THIS_MODULE, "vcm_type");
+	if (IS_ERR(vcm_type_class)) {
+		ret = PTR_ERR(vcm_type_class);
+		printk("vcm_type_class: couldn't create vcm_type\n");
+	}
+	ret = class_create_file(vcm_type_class, &vcm_type_value);
+	if (ret) {
+		printk("id_class: couldn't create value\n");
+	}else{
+	printk("id_class: create value ok!!!\n");
+	}
+	file_is_create = 1;
+	}
+ /*[CAMERA]-ADD END by wenlong.song,2015-12-18,Task-1177157 ,for camera from L*/
 
 	if (slave_info->is_init_params_valid) {
 		CDBG("position %d",
@@ -906,6 +955,12 @@ int32_t msm_sensor_driver_probe(void *setting,
 	pr_err("%s probe succeeded", slave_info->sensor_name);
 
 	/*
+	  Set probe succeeded flag to 1 so that no other camera shall
+	 * probed on this slot
+	 */
+	s_ctrl->is_probe_succeed = 1;
+
+	/*
 	 * Update the subdevice id of flash-src based on availability in kernel.
 	 */
 	if (slave_info->is_flash_supported == 0) {
@@ -957,12 +1012,44 @@ int32_t msm_sensor_driver_probe(void *setting,
 
 	msm_sensor_fill_sensor_info(s_ctrl, probed_info, entity_name);
 
+/* [PLATFORM]-Mod-BEGIN by TCTNB.YJ, add for rear camera on idol3  */
+	/* For new special actuators appearing in furture products,
+	different value of "special_actuator4tct" may represent different actuator. */
+	/*
+	For example,
+			special_actuator4tct = 1;  --->   ak7345
+			special_actuator4tct = 2;  --->   ak7348_idol3
+	.................................................................
+			special_actuator4tct = n;  --->   ak8....
+	*/
+#if defined(CONFIG_TCT_8X16_IDOL3) || defined(CONFIG_TCT_8X16_IDOL347) ||  defined(CONFIG_TCT_8X16_M823_ORANGE)
+	if ( 0 == strcmp(s_ctrl->sensordata->actuator_name, "ak7345") ||
+			 0 == strcmp(s_ctrl->sensordata->actuator_name, "ak7345_m823_orange") ||
+         0 == strncmp(s_ctrl->sensordata->actuator_name, "ak7345_idol347", strlen("ak7345_idol347"))) {
+		special_actuator4tct = 1;
+		printk("actuator_name=%s, special_actuator4tct=%d \n",
+			s_ctrl->sensordata->actuator_name, special_actuator4tct);
+	}
+    if (0 == strcmp(s_ctrl->sensordata->actuator_name, "ak7348_idol347"))
+    {
+		special_actuator_s5k3m2 = 1;
+    }
+
+	if (0 == strcmp(s_ctrl->sensordata->actuator_name, "ak7348_idol3") || 
+	   0 == strcmp(s_ctrl->sensordata->actuator_name, "ak7348_m823_orange"))
+	{
+		special_actuator4tct = 2;
+		printk("actuator_name=%s, special_actuator4tct=%d \n",
+			s_ctrl->sensordata->actuator_name, special_actuator4tct);
+	}
+#endif
+/* [PLATFORM]-Mod-END by TCTNB.YJ*/
 	/*
 	 * Set probe succeeded flag to 1 so that no other camera shall
 	 * probed on this slot
 	 */
 	s_ctrl->is_probe_succeed = 1;
-	return rc;
+	return rc;	
 
 camera_power_down:
 	s_ctrl->func_tbl->sensor_power_down(s_ctrl);

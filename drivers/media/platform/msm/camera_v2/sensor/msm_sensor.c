@@ -20,6 +20,20 @@
 
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
+ 
+/*[CAMERA]-ADD BEGIN by wenlong.song,2015-12-18,Task-1177157 ,for camera from L*/
+int actuator_exist = 1;
+
+#if !defined(CONFIG_TCT_8X16_POP10) && !defined(CONFIG_TCT_8X16_M823_ORANGE)
+#define TCT_SENSOR_OTP_OPEN 1
+#if TCT_SENSOR_OTP_OPEN
+#include "imx214_idol347_otp.h"
+#include "s5k5e2_idol347_otp.h"
+#include "ov5670_idol347_tct_OTP.h"
+#include "s5k3m2_idol347_otp.h"
+#endif
+#endif
+ /*[CAMERA]-ADD END by wenlong.song,2015-12-18,Task-1177157 ,for camera from L*/
 
 static struct v4l2_file_operations msm_sensor_v4l2_subdev_fops;
 static void msm_sensor_adjust_mclk(struct msm_camera_power_ctrl_t *ctrl)
@@ -484,15 +498,43 @@ int msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 
 	return rc;
 }
-
+ /*[CAMERA]-ADD wenlong.song,2015-12-18,Task-1177157 ,for camera from L*/
+uint16_t msm_sensor_read_moudule_id(struct msm_sensor_ctrl_t *s_ctrl)
+{
+	uint16_t rc = 0;
+	uint16_t moduleid = 0;
+	struct msm_camera_i2c_client *sensor_i2c_client;
+	sensor_i2c_client = s_ctrl->sensor_i2c_client;
+	
+	rc |= sensor_i2c_client->i2c_func_tbl->i2c_write(sensor_i2c_client,0x0136,0x1800, MSM_CAMERA_I2C_WORD_DATA);
+	rc |= sensor_i2c_client->i2c_func_tbl->i2c_write(sensor_i2c_client,0x0304,0x0006, MSM_CAMERA_I2C_WORD_DATA);
+	rc |= sensor_i2c_client->i2c_func_tbl->i2c_write(sensor_i2c_client,0x0306,0x0073, MSM_CAMERA_I2C_WORD_DATA);
+	rc |= sensor_i2c_client->i2c_func_tbl->i2c_write(sensor_i2c_client,0x030C,0x0004, MSM_CAMERA_I2C_WORD_DATA);
+	rc |= sensor_i2c_client->i2c_func_tbl->i2c_write(sensor_i2c_client,0x030E,0x0064, MSM_CAMERA_I2C_WORD_DATA);
+	rc |= sensor_i2c_client->i2c_func_tbl->i2c_write(sensor_i2c_client,0x0302,0x0001, MSM_CAMERA_I2C_WORD_DATA);
+	rc |= sensor_i2c_client->i2c_func_tbl->i2c_write(sensor_i2c_client,0x0300,0x0004, MSM_CAMERA_I2C_WORD_DATA);
+	rc |= sensor_i2c_client->i2c_func_tbl->i2c_write(sensor_i2c_client,0x030A,0x0001, MSM_CAMERA_I2C_WORD_DATA);
+	rc |= sensor_i2c_client->i2c_func_tbl->i2c_write(sensor_i2c_client,0x0308,0x0008, MSM_CAMERA_I2C_WORD_DATA);
+	rc |= sensor_i2c_client->i2c_func_tbl->i2c_write(sensor_i2c_client,0x0100,0x0100, MSM_CAMERA_I2C_WORD_DATA);
+	msleep(10);
+	rc |= sensor_i2c_client->i2c_func_tbl->i2c_write(sensor_i2c_client,0x0A02, 31, 
+		MSM_CAMERA_I2C_BYTE_DATA);
+	rc |= sensor_i2c_client->i2c_func_tbl->i2c_write(sensor_i2c_client,0x0A00, 0x01,
+		MSM_CAMERA_I2C_BYTE_DATA);
+	msleep(1);
+	rc |= sensor_i2c_client->i2c_func_tbl->i2c_read(sensor_i2c_client, 0x0A06,
+		&moduleid, MSM_CAMERA_I2C_BYTE_DATA);
+	if(rc < 0)
+		return rc;
+	return moduleid;
+}
 int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	int rc = 0;
-	uint16_t chipid = 0;
+	uint16_t chipid = 0,moduleid=0;//val=0;
 	struct msm_camera_i2c_client *sensor_i2c_client;
 	struct msm_camera_slave_info *slave_info;
 	const char *sensor_name;
-
 	if (!s_ctrl) {
 		pr_err("%s:%d failed: %p\n",
 			__func__, __LINE__, s_ctrl);
@@ -516,7 +558,20 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 		pr_err("%s: %s: read id failed\n", __func__, sensor_name);
 		return rc;
 	}
-
+	 /*[CAMERA]-ADD BEGIN by wenlong.song,2015-12-18,Task-1177157 ,for camera from L*/
+	if(!strcmp(s_ctrl->sensordata->sensor_name, "s5k3m2_idol347")){
+		moduleid = msm_sensor_read_moudule_id(s_ctrl);
+		pr_err("%s: %s: moduleid=0x%x,rc=%d\n", __func__, sensor_name,moduleid,rc);
+		if(moduleid == 0x32)
+			return -22;
+	}
+	if(!strcmp(s_ctrl->sensordata->sensor_name, "s5k3m2_idol347_samsuny")){
+		moduleid = msm_sensor_read_moudule_id(s_ctrl);
+		pr_err("%s: %s: moduleid=0x%x,rc=%d\n", __func__, sensor_name,moduleid,rc);
+		if(moduleid != 0x32)
+			return -22;
+	}
+ /*[CAMERA]-ADD END by wenlong.song,2015-12-18,Task-1177157 ,for camera from L*/
 	CDBG("%s: read id: 0x%x expected id 0x%x:\n", __func__, chipid,
 		slave_info->sensor_id);
 	if (chipid != slave_info->sensor_id) {
@@ -554,6 +609,52 @@ static int msm_sensor_get_af_status(struct msm_sensor_ctrl_t *s_ctrl,
 	return 0;
 }
 
+#if	TCT_SENSOR_OTP_OPEN
+static int TCT_update_OTP(struct msm_sensor_ctrl_t *s_ctrl)
+{
+    mutex_lock(s_ctrl->msm_sensor_mutex);
+	printk("OTP: sensor name: %s\n",s_ctrl->sensordata->sensor_name);
+
+	if (!strcmp(s_ctrl->sensordata->sensor_name, "ov5670_truly_ff") ||
+			!strcmp(s_ctrl->sensordata->sensor_name, "ov5670_truly")) {
+		}
+#if !defined(CONFIG_TCT_8X16_POP10) && !defined(CONFIG_TCT_8X16_M823_ORANGE)
+	else if(!strcmp(s_ctrl->sensordata->sensor_name, "imx214_idol347")){
+		pr_err("OTP: imx214_idol347\n");
+		imx214_get_otp(s_ctrl);
+	}
+	else if(!strcmp(s_ctrl->sensordata->sensor_name, "s5k5e2_idol347")){
+		pr_err("OTP: s5k5e2_idol347\n");
+		s5k5e2_idol347_otp_read_update_wb(s_ctrl);
+	}
+	else if(!strcmp(s_ctrl->sensordata->sensor_name, "ov5670_idol347")){
+		pr_err("OTP: ov5670_idol347\n");
+		ov5670_idol347_update_otp_wb(s_ctrl->sensor_i2c_client);
+	}
+	else if(!strcmp(s_ctrl->sensordata->sensor_name, "s5k3m2_idol347")){
+		pr_err("OTP: s5k3m2_idol347\n");
+		 s5k3m2_update_otp(s_ctrl);
+	}
+	else if(!strcmp(s_ctrl->sensordata->sensor_name, "s5k3m2_idol347_samsuny")){
+		pr_err("OTP: s5k3m2_idol347_samsuny\n");
+		 s5k3m2_update_otp(s_ctrl);
+	}
+	else if(!strcmp(s_ctrl->sensordata->sensor_name, "imx214_8916")){
+		pr_err("OTP: imx214_8916\n");
+		imx214_8916_get_otp(s_ctrl);
+	}
+#endif
+
+	else{
+		printk("OTP: it should be make some mistakes: %d\n", __LINE__);
+    }
+    mutex_unlock(s_ctrl->msm_sensor_mutex);
+
+/* [PLATFORM]-Add-END by TCTNB.qijiang.yu*/
+	return 0;
+}
+#endif
+/* [PLATFORM]-Add-END by TCTNB.qijiang.yu*/
 static long msm_sensor_subdev_ioctl(struct v4l2_subdev *sd,
 			unsigned int cmd, void *arg)
 {
@@ -579,6 +680,134 @@ static long msm_sensor_subdev_ioctl(struct v4l2_subdev *sd,
 	case MSM_SD_SHUTDOWN:
 		msm_sensor_stop_stream(s_ctrl);
 		return 0;
+		 /*[CAMERA]-ADD BEGIN by wenlong.song,2015-12-18,Task-1177157 ,for camera from L*/
+	case VIDIOC_MSM_SENSOR_GET_OTP_STATUS:
+#if	TCT_SENSOR_OTP_OPEN
+		printk("%s cmd =%d \n",__func__,cmd);
+		TCT_update_OTP(s_ctrl);
+		return 0;
+/*
+FotoNation begin
+*/
+#if defined(CONFIG_TCT_8X16_IDOL3) || defined(CONFIG_TCT_8X16_IDOL347)
+	case VIDIOC_MSM_SENSOR_GET_FF_OTP:
+		printk("FN_FF: FF OTP kernel call.\n");
+		printk("FN_FF: sensor name:%s.\n", s_ctrl->sensordata->sensor_name );
+		 
+		if(!strcmp(s_ctrl->sensordata->sensor_name, "imx214_idol347"))
+		{
+			uint32_t dac_get;
+			struct sensor_ff_otp_data * ffdata = (struct sensor_ff_otp_data*)argp;
+			pr_err("FN_FF:OTP: imx214_idol347\n");
+			dac_get = imx214_get_otp_af(s_ctrl);
+			ffdata->cam_module_id = CAM_MODULE_ID_IDOL347_SOURCE1;
+			ffdata->infinity_dac  = ffdata->infinity_dac_phys = ffdata->infinity_dac_af = dac_get &0xffff;
+			ffdata->macro_dac     = ffdata->macro_dac_phys = ffdata->macro_dac_af = (dac_get >> 16 ) &0xffff;
+
+		}
+		else if(!strcmp(s_ctrl->sensordata->sensor_name, "imx214_8916"))
+		{
+			uint32_t dac_get;
+			struct sensor_ff_otp_data * ffdata = (struct sensor_ff_otp_data*)argp;
+			pr_err("FN_FF:OTP: imx214_8916\n");
+			dac_get = imx214_get_otp_af(s_ctrl);
+			ffdata->cam_module_id = CAM_MODULE_ID_IDOL347_SOURCE1;
+			ffdata->infinity_dac  = ffdata->infinity_dac_phys = ffdata->infinity_dac_af = dac_get &0xffff;
+			ffdata->macro_dac     = ffdata->macro_dac_phys = ffdata->macro_dac_af = (dac_get >> 16 ) &0xffff;
+		}
+		else if(!strcmp(s_ctrl->sensordata->sensor_name, "s5k3m2_idol347"))
+        {
+			struct sensor_ff_otp_data * ffdata = (struct sensor_ff_otp_data*)argp;
+			uint32_t dac_get = s5k3m2_get_otp_af(s_ctrl);
+			uint16_t dac_inf   = dac_get & 0xffff;
+			uint16_t dac_macro = (dac_get >>16) & 0xffff;
+			uint16_t dac_inf_af   = (dac_inf - dac_inf)   * 1024 / (dac_macro - dac_inf);
+			uint16_t dac_macro_af = (dac_macro - dac_inf) * 1024 / (dac_macro - dac_inf);
+			uint16_t dac_inf_logical   = (1024 * dac_inf * 15/100) / (dac_macro * 115/100 - dac_inf * 85/100);
+			uint16_t dac_macro_logical = 1024 *(dac_macro - dac_inf * 85/100) / (dac_macro * 115/100 - dac_inf * 85/100);
+			ffdata = (struct sensor_ff_otp_data*)argp;
+			ffdata->cam_module_id = CAM_MODULE_ID_IDOL347_SOURCE2;
+			ffdata->infinity_dac  = dac_inf_logical;
+			ffdata->macro_dac     = dac_macro_logical;
+			ffdata->infinity_dac_phys = dac_inf;
+			ffdata->macro_dac_phys    = dac_macro;
+			ffdata->infinity_dac_af   = dac_inf_af;
+			ffdata->macro_dac_af      = dac_macro_af;
+			pr_err("FN_FF:OTP: s5k3m2_idol347: inf:%d, macro:%d, OTP_inf:%d, OTP_macro:%d\n", 
+				dac_inf_logical, dac_macro_logical, dac_inf, dac_macro);
+        }
+		else if (!strcmp(s_ctrl->sensordata->sensor_name, "s5k3m2_idol347_samsuny"))
+		{
+			struct sensor_ff_otp_data * ffdata = (struct sensor_ff_otp_data*)argp;
+			uint32_t dac_get = s5k3m2_get_otp_af(s_ctrl);
+			uint16_t dac_inf   = ((dac_get & 0xff) <<8) | ((dac_get & 0xff00) >>8);
+			uint16_t dac_macro = (((dac_get >>16) & 0xff) <<8) | (((dac_get >>16) & 0xff00) >>8);
+			uint16_t dac_inf_af   = (dac_inf - dac_inf)   * 1024 / (dac_macro - dac_inf);
+			uint16_t dac_macro_af = (dac_macro - dac_inf) * 1024 / (dac_macro - dac_inf);
+			uint16_t dac_inf_logical   = (1024 * dac_inf * 15/100) / (dac_macro * 115/100 - dac_inf * 85/100);
+			uint16_t dac_macro_logical = 1024 *(dac_macro - dac_inf * 85/100) / (dac_macro * 115/100 - dac_inf * 85/100);
+			ffdata = (struct sensor_ff_otp_data*)argp;
+			ffdata->cam_module_id = CAM_MODULE_ID_IDOL347_SOURCE2;
+			ffdata->infinity_dac  = dac_inf_logical;
+			ffdata->macro_dac     = dac_macro_logical;
+			ffdata->infinity_dac_phys = dac_inf;
+			ffdata->macro_dac_phys    = dac_macro;
+			ffdata->infinity_dac_af   = dac_inf_af;
+			ffdata->macro_dac_af      = dac_macro_af;
+			pr_err("FN_FF:OTP: s5k3m2_idol347_samsuny: inf:%d, macro:%d, OTP_inf:%d, OTP_macro:%d\n", 
+				dac_inf_logical, dac_macro_logical, dac_inf, dac_macro);
+	}		return 0;
+
+	case VIDIOC_MSM_SENSOR_TEMPERATURE:
+		pr_err("VIDIOC_MSM_SENSOR_TEMPERATURE received\n");
+		if(!strcmp(s_ctrl->sensordata->sensor_name, "imx214_idol347"))
+		{
+			//pr_err("TEMPERATURE: imx214_idol347\n");
+			rc = imx214_temperature(s_ctrl, (uint32_t*)argp);
+		}
+        else if(!strcmp(s_ctrl->sensordata->sensor_name, "imx214_8916"))
+        {
+			//pr_err("TEMPERATURE: imx214_8916\n");
+			rc = imx214_temperature(s_ctrl, (uint32_t*)argp);
+        }
+        else if((!strcmp(s_ctrl->sensordata->sensor_name, "s5k3m2_idol347")) || (!strcmp(s_ctrl->sensordata->sensor_name, "s5k3m2_idol347_samsuny")))
+        {
+			//pr_err("TEMPERATURE: s5k3m2_idol347\n");
+			rc = s5k3m2_temperature(s_ctrl, (uint32_t*)argp);
+        }
+        else if(!strcmp(s_ctrl->sensordata->sensor_name, "s5k3m2_idol3"))
+        {
+			//pr_err("TEMPERATURE: s5k3m2_idol3\n");
+			rc = s5k3m2_temperature(s_ctrl, (uint32_t*)argp);
+        }
+		return rc;
+/*
+FotoNation end
+*/
+#endif //defined(CONFIG_TCT_8X16_IDOL3) || defined(CONFIG_TCT_8X16_IDOL347)
+#endif
+
+/* [PLATFORM]-Add-BEGIN by TCTSZ.ZKX 2014/09/06, OTP dev */
+		return 0;
+/* [PLATFORM]-Add-END by TCTSZ.ZKX 2014/09/06*/
+#if defined(CONFIG_TCT_8X16_IDOL3) || defined(CONFIG_TCT_8X16_IDOL347)
+//wenyuan.li@tcl 20150228 bug936683 get framelength from kernel +
+	case VIDIOC_MSM_SENSOR_FRAMELENGTH:
+		pr_err("[tct_dxo]VIDIOC_MSM_SENSOR_FRAMELENGTH received\n");
+		if(!strcmp(s_ctrl->sensordata->sensor_name, "imx214_idol347"))
+		{
+			pr_err("FRAMELENGTH: imx214_idol347\n");
+			imx214_framelength(s_ctrl, (uint32_t*)argp);
+		}
+        else if(!strcmp(s_ctrl->sensordata->sensor_name, "imx214_8916"))
+        {
+			pr_err("FRAMELENGTH: imx214_8916\n");
+			imx214_framelength(s_ctrl, (uint32_t*)argp);
+        }
+#endif		
+		return 0;
+//wenyuan.li@tcl 20150228 bug936683 get framelength from kernel -		
+ /*[CAMERA]-ADD END by wenlong.song,2015-12-18,Task-1177157 ,for camera from L*/
 	case MSM_SD_NOTIFY_FREEZE:
 		return 0;
 	default:

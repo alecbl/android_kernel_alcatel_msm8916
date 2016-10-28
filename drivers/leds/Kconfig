@@ -517,7 +517,14 @@ config LEDS_BLINKM
 	help
 	  This option enables support for the BlinkM RGB LED connected
 	  through I2C. Say Y to enable support for the BlinkM LED.
-
+	  
+config GPIO_LED_FLASH_SGM3785_IDOL347
+	bool "sgm3785 gpio led flash for camera."
+	depends on LEDS_CLASS
+	default n
+	help
+	  sgm3785 gpio led flash for camera.
+	  
 config LEDS_AW2013
 	tristate "LED support for AW2013"
 	depends on LEDS_CLASS && I2C
