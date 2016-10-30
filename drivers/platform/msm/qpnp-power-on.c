@@ -259,7 +259,7 @@ int qpnp_pon_set_restart_reason(enum pon_restart_reason reason)
 		return 0;
 
 	rc = qpnp_pon_masked_write(pon, QPNP_PON_SOFT_RB_SPARE(pon->base),
-					PON_MASK(7, 2), (reason << 2));
+					PON_MASK(7, 5), (reason << 5));
 	if (rc)
 		dev_err(&pon->spmi->dev,
 				"Unable to write to addr=%x, rc(%d)\n",
@@ -1201,7 +1201,14 @@ static int qpnp_pon_config_init(struct qpnp_pon *pon)
 								cfg->pon_type);
 			return -EINVAL;
 		}
-
+#ifdef  CONFIG_TCTNB_LONGPRESS_DISABLE /*#[BUGFIX]-ADD by TCTNB.XQJ,09/25/2014,PR-791880.for disable hard reset ,hardware test*/
+                cfg->support_reset=0;
+#endif
+/*JRD BSP START eric.gong@tcl.com "[idol3-4.7][charger] long press power key do not reboot" 2015/01/09*/
+#ifdef	CONFIG_IDOL347_PKYLONGPRESS_DISABLE
+				cfg->support_reset=0;
+#endif
+/*JRD BSP END eric.gong@tcl.com "[idol3-4.7][charger] long press power key do not reboot" 2015/01/09*/
 		if (cfg->support_reset) {
 			/*
 			 * Get the reset parameters (bark debounce time and
@@ -1636,7 +1643,14 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 		s3_src_reg = QPNP_PON_S3_SRC_KPDPWR_OR_RESIN;
 	else /* default combination */
 		s3_src_reg = QPNP_PON_S3_SRC_KPDPWR_AND_RESIN;
-
+ #ifdef  CONFIG_TCTNB_LONGPRESS_DISABLE  /*#[BUGFIX]-ADD by TCTNB.XQJ,09/25/2014,PR-791880.for disable hard reset ,hardware test*/
+          s3_src_reg=QPNP_PON_S3_SRC_RESIN;
+#endif
+/*JRD BSP START eric.gong@tcl.com "[idol3-4.7][charger] long press power key do not reboot" 2015/01/09*/
+#ifdef	CONFIG_IDOL347_PKYLONGPRESS_DISABLE
+	  s3_src_reg=QPNP_PON_S3_SRC_RESIN;
+#endif
+/*JRD BSP END eric.gong@tcl.com "[idol3-4.7][charger] long press power key do not reboot" 2015/01/09*/
 	/* S3 source is a write once register. If the register has
 	 * been configured by bootloader then this operation will
 	 * not be effective. */
@@ -1678,6 +1692,15 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 		dev_err(&spmi->dev, "sys file creation failed\n");
 		return rc;
 	}
+
+#ifdef  CONFIG_TCTNB_LONGPRESS_DISABLE  /*#[BUGFIX]-ADD by TCTNB.XQJ,09/25/2014,PR-791880.for disable hard reset ,hardware test*/
+      qpnp_pon_wd_config(0);
+#endif
+/*JRD BSP START eric.gong@tcl.com "[idol3-4.7][charger] long press power key do not reboot" 2015/01/09*/
+#ifdef	CONFIG_IDOL347_PKYLONGPRESS_DISABLE
+	  qpnp_pon_wd_config(0);
+#endif
+/*JRD BSP END eric.gong@tcl.com "[idol3-4.7][charger] long press power key do not reboot" 2015/01/09*/
 
 	/* config whether store the hard reset reason */
 	pon->store_hard_reset_reason = of_property_read_bool(
